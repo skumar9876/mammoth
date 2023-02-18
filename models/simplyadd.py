@@ -25,6 +25,7 @@ class SimplyAdd(ContinualModel):
     COMPATIBILITY = ['class-il', 'domain-il', 'task-il', 'general-continual']
 
     def __init__(self, backbone, loss, args, transform):
+        super(SimplyAdd, self).__init__(backbone, loss, args, transform)
         self.prior = copy.deepcopy(backbone)
         self.prior_old = copy.deepcopy(self.prior)
         self.prior_opt = SGD(self.prior.parameters(), lr=self.args.lr)
@@ -32,8 +33,6 @@ class SimplyAdd(ContinualModel):
         self.TRAIN_PATH = "train_model.pt"
         self.update_period = args.update_period
         self.step = 0
-
-        super(SimplyAdd, self).__init__(backbone, loss, args, transform)
         self.net_old = copy.deepcopy(self.net)
 
         # Add models to device.
