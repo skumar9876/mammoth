@@ -45,6 +45,9 @@ def evaluate(model: ContinualModel, dataset: ContinualDataset, last=False) -> Tu
     """
     status = model.net.training
     model.net.eval()
+    if hasattr(model, 'prior_net'):
+        model.prior_net.eval()
+
     accs, accs_mask_classes = [], []
     for k, test_loader in enumerate(dataset.test_loaders):
         if last and k < len(dataset.test_loaders) - 1:
@@ -110,6 +113,8 @@ def train(model: ContinualModel, dataset: ContinualDataset,
     print(file=sys.stderr)
     for t in range(dataset.N_TASKS):
         model.net.train()
+        if hasattr(model, 'prior_net'):
+            model.prior_net.train()
         train_loader, test_loader = dataset.get_data_loaders()
         if hasattr(model, 'begin_task'):
             model.begin_task(dataset)

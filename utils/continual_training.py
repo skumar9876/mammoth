@@ -28,6 +28,9 @@ def evaluate(model: ContinualModel, dataset) -> float:
     :return: a float value that indicates the accuracy
     """
     model.net.eval()
+    if hasattr(model, 'prior_net'):
+        model.prior_net.eval()
+
     correct, total = 0, 0
     while not dataset.test_over:
         inputs, labels = dataset.get_test_data()
@@ -64,6 +67,9 @@ def train(args: Namespace):
         args.wandb_url = wandb.run.get_url()
 
     model.net.train()
+    if hasattr(model, 'prior_net'):
+        model.prior_net.train()
+
     epoch, i = 0, 0
     while not dataset.train_over:
         inputs, labels, not_aug_inputs = dataset.get_train_data()
