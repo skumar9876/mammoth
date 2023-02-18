@@ -32,8 +32,8 @@ class SimplyAdd(ContinualModel):
         self.PRIOR_PATH = "prior_model.pt"
         self.TRAIN_PATH = "train_model.pt"
         self.update_period = args.update_period
+        self.num_distill_steps = args.update_period * 10
         self.step = 0
-        self.net_old = copy.deepcopy(self.net)
 
         # Add models to device.
         self.net.to(self.device)
@@ -57,19 +57,6 @@ class SimplyAdd(ContinualModel):
 
     def observe(self, inputs, labels, not_aug_inputs):
         self.step += 1
-
-        # Update prior network.
-        if not self.buffer.is_empty():
-            buf_inputs, _ = self.buffer.get_data(
-                self.args.minibatch_size, transform=self.transform)
-            buf_pred_logits = self.prior(buf_inputs)
-            buf_target_logits = self.prior_old(buf_inputs).detach() + self.net_old(buf_inputs).detach()
-
-            self.prior_opt.zero_grad()
-            prior_loss = F.mse_loss(buf_pred_logits, buf_target_logits)
-            prior_loss.backward()
-            self.prior_opt.step()
-    
         # Update train network.
         self.opt.zero_grad()
         outputs = self.prior_old(inputs).detach() + self.net(inputs)
@@ -80,16 +67,29 @@ class SimplyAdd(ContinualModel):
         self.buffer.add_data(examples=not_aug_inputs, logits=outputs.data)
 
         if self.step % self.update_period == 0:
+            self.distill()
             self.update_prior()
             self.update_train()
 
         return train_loss.item()
+
+    def distill(self):
+        if not self.buffer.is_empty():
+            for i in range(self.num_distill_steps):
+                buf_inputs, _ = self.buffer.get_data(
+                self.args.minibatch_size, transform=self.transform)
+                buf_pred_logits = self.prior(buf_inputs)
+                buf_target_logits = self.prior_old(buf_inputs).detach() + self.net(buf_inputs).detach()
+
+                self.prior_opt.zero_grad()
+                prior_loss = F.mse_loss(buf_pred_logits, buf_target_logits)
+                prior_loss.backward()
+                self.prior_opt.step()
     
     def update_prior(self):
         torch.save(self.prior.state_dict(), self.PRIOR_PATH)
-        self.prior_old.load_state_dict(torch.load(self.PRIOR_PATH), strict=False)
+        self.prior_old.load_state_dict(torch.load(self.PRIOR_PATH), strict=True)
 
     def update_train(self):
         torch.save(self.net.state_dict(), self.TRAIN_PATH)
-        self.net_old.load_state_dict(torch.load(self.TRAIN_PATH), strict=False)
-        self.net.load_state_dict(torch.load(self.TRAIN_INIT_PATH), strict=False)
+        self.net.load_state_dict(torch.load(self.TRAIN_INIT_PATH), strict=True)
