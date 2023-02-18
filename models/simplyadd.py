@@ -3,7 +3,7 @@ import math
 from sys import float_repr_style
 import torch
 from torch.nn import functional as F
-from torch.optim import SGD
+from torch.optim import Adam, SGD
 
 from models.utils.continual_model import ContinualModel
 from utils.args import ArgumentParser, add_experiment_args, add_management_args, add_rehearsal_args
@@ -30,9 +30,8 @@ class SimplyAdd(ContinualModel):
         self.net_init = copy.deepcopy(backbone)
         self.prior = copy.deepcopy(backbone)
         self.prior_old = copy.deepcopy(self.prior)
-        self.prior_opt = SGD(self.prior.parameters(), lr=0.5*self.args.lr)
+        self.prior_opt = Adam(self.prior.parameters(), lr=self.args.lr)
         self.PRIOR_PATH = "prior_model.pt"
-        self.TRAIN_PATH = "train_model.pt"
         self.update_period = args.update_period
         self.num_distill_steps = args.update_period * 10
         self.step = 0
@@ -100,7 +99,6 @@ class SimplyAdd(ContinualModel):
         self.prior_old.load_state_dict(torch.load(self.PRIOR_PATH), strict=True)
 
     def update_train(self):
-        torch.save(self.net.state_dict(), self.TRAIN_PATH)
         self.net.load_state_dict(torch.load(self.TRAIN_INIT_PATH), strict=True)
     
     def end_task(self, unused_dataset):
