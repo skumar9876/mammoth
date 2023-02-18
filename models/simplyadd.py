@@ -26,6 +26,7 @@ class SimplyAdd(ContinualModel):
 
     def __init__(self, backbone, loss, args, transform):
         super(SimplyAdd, self).__init__(backbone, loss, args, transform)
+        self.net_init = copy.deepcopy(backbone)
         self.prior = copy.deepcopy(backbone)
         self.prior_old = copy.deepcopy(self.prior)
         self.prior_opt = SGD(self.prior.parameters(), lr=self.args.lr)
@@ -37,12 +38,13 @@ class SimplyAdd(ContinualModel):
 
         # Add models to device.
         self.net.to(self.device)
+        self.net_init.to(self.device)
         self.prior.to(self.device)
         self.prior_old.to(self.device)
 
         # Save initial parameters.
         self.TRAIN_INIT_PATH = "train_model_init"
-        torch.save(self.net.state_dict(), self.TRAIN_INIT_PATH)
+        torch.save(self.net_init.state_dict(), self.TRAIN_INIT_PATH)
 
         self.buffer = Buffer(self.args.buffer_size, self.device)
 
@@ -77,14 +79,14 @@ class SimplyAdd(ContinualModel):
             for i in range(self.num_distill_steps):
                 buf_inputs, _ = self.buffer.get_data(
                 self.args.minibatch_size, transform=self.transform)
-                buf_pred_logits = self.prior(buf_inputs)
+                buf_pred_logits = self.prior(buf_inputs) + self.net_init(buf_inputs).detach()
                 buf_target_logits = self.prior_old(buf_inputs).detach() + self.net(buf_inputs).detach()
 
                 self.prior_opt.zero_grad()
                 prior_loss = F.mse_loss(buf_pred_logits, buf_target_logits)
                 prior_loss.backward()
                 self.prior_opt.step()
-    
+
     def update_prior(self):
         torch.save(self.prior.state_dict(), self.PRIOR_PATH)
         self.prior_old.load_state_dict(torch.load(self.PRIOR_PATH), strict=True)
