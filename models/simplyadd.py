@@ -68,10 +68,10 @@ class SimplyAdd(ContinualModel):
 
         self.buffer.add_data(examples=not_aug_inputs, logits=outputs.data)
 
-        if self.step % self.update_period == 0:
-            self.distill()
-            self.update_prior()
-            self.update_train()
+        # if self.step % self.update_period == 0:
+        #     self.distill()
+        #     self.update_prior()
+        #     self.update_train()
 
         return train_loss.item()
 
@@ -102,3 +102,8 @@ class SimplyAdd(ContinualModel):
     def update_train(self):
         torch.save(self.net.state_dict(), self.TRAIN_PATH)
         self.net.load_state_dict(torch.load(self.TRAIN_INIT_PATH), strict=True)
+    
+    def end_task(self, unused_dataset):
+        self.distill()
+        self.update_prior()
+        self.update_train()
