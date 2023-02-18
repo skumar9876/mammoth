@@ -273,7 +273,6 @@ best_args = {
                        'n_epochs': 1}},
         'simplyadd': {200: {'lr': 0.2,
                              'minibatch_size': 128,
-                             'alpha': 1.0,
                              'batch_size': 128,
                              'n_epochs': 1,
                              'update_period': 100}},
