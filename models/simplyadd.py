@@ -43,7 +43,7 @@ class SimplyAdd(ContinualModel):
 
         # Save initial parameters.
         self.TRAIN_INIT_PATH = "train_model_init"
-        torch.save(self.net, self.TRAIN_INIT_PATH)
+        torch.save(self.net.state_dict(), self.TRAIN_INIT_PATH)
 
         self.buffer = Buffer(self.args.buffer_size, self.device)
 
@@ -90,6 +90,6 @@ class SimplyAdd(ContinualModel):
         self.prior_old.load_state_dict(torch.load(self.PRIOR_PATH), strict=False)
 
     def update_train(self):
-        torch.save(self.net(), self.TRAIN_PATH)
+        torch.save(self.net.state_dict(), self.TRAIN_PATH)
         self.net_old.load_state_dict(torch.load(self.TRAIN_PATH), strict=False)
         self.net.load_state_dict(torch.load(self.TRAIN_INIT_PATH), strict=False)
