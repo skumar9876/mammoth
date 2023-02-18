@@ -15,6 +15,8 @@ def get_parser() -> ArgumentParser:
     add_management_args(parser)
     add_experiment_args(parser)
     add_rehearsal_args(parser)
+
+    parser.add_argument('--update_period', type=int, required=True)
     return parser
 
 
@@ -22,13 +24,13 @@ class SimplyAdd(ContinualModel):
     NAME = 'der'
     COMPATIBILITY = ['class-il', 'domain-il', 'task-il', 'general-continual']
 
-    def __init__(self, prior, backbone, loss, args, transform, update_frequency):
-        self.prior = copy.deepcopy(prior)
+    def __init__(self, backbone, loss, args, transform):
+        self.prior = copy.deepcopy(backbone)
         self.prior_old = copy.deepcopy(self.prior)
         self.prior_opt = SGD(self.prior.parameters(), lr=self.args.lr)
         self.PRIOR_PATH = "prior_model.pt"
         self.TRAIN_PATH = "train_model.pt"
-        self.update_frequency = update_frequency
+        self.update_period = args.update_period
         self.step = 0
 
         super(SimplyAdd, self).__init__(backbone, loss, args, transform)
@@ -78,7 +80,7 @@ class SimplyAdd(ContinualModel):
 
         self.buffer.add_data(examples=not_aug_inputs, logits=outputs.data)
 
-        if self.step % self.update_frequency == 0:
+        if self.step % self.update_period == 0:
             self.update_prior()
             self.update_train()
 
