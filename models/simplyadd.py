@@ -30,7 +30,7 @@ class SimplyAdd(ContinualModel):
         self.net_init = copy.deepcopy(backbone)
         self.prior = copy.deepcopy(backbone)
         self.prior_old = copy.deepcopy(self.prior)
-        self.prior_opt = SGD(self.prior.parameters(), lr=0.1*self.args.lr)
+        self.prior_opt = SGD(self.prior.parameters(), lr=0.5*self.args.lr)
         self.PRIOR_PATH = "prior_model.pt"
         self.TRAIN_PATH = "train_model.pt"
         self.update_period = args.update_period
