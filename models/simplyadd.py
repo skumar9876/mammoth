@@ -37,7 +37,6 @@ class SimplyAdd(ContinualModel):
 
         # Add models to device.
         self.net.to(self.device)
-        self.net_old.to(self.device)
         self.prior.to(self.device)
         self.prior_old.to(self.device)
 
