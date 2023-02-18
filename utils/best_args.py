@@ -275,7 +275,7 @@ best_args = {
                              'minibatch_size': 128,
                              'batch_size': 128,
                              'n_epochs': 1,
-                             'update_period': 100}},
+                             'update_period': 500}},
         'derpp': {200: {'lr': 0.1,
                         'minibatch_size': 128,
                         'alpha': 1.0,

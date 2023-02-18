@@ -1,4 +1,5 @@
 import copy
+import math
 from sys import float_repr_style
 import torch
 from torch.nn import functional as F
@@ -84,6 +85,13 @@ class SimplyAdd(ContinualModel):
 
                 self.prior_opt.zero_grad()
                 prior_loss = F.mse_loss(buf_pred_logits, buf_target_logits)
+
+                try:
+                    assert not math.isnan(prior_loss.item())
+                except:
+                    print("Prior loss is nan!")
+                    import pdb; pdb.set_trace()
+
                 prior_loss.backward()
                 self.prior_opt.step()
 
