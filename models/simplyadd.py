@@ -53,7 +53,7 @@ class SimplyAdd(ContinualModel):
         :param x: batch of inputs
         :return: the result of the computation
         """
-        return self.prior(x) + self.net(x)
+        return self.prior_old(x) + self.net_old(x)
 
     def observe(self, inputs, labels, not_aug_inputs):
         self.step += 1
