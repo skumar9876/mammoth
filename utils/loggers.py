@@ -135,10 +135,8 @@ class Logger:
         """
         if before_distill:
             accs = self.accs_b4_distill
-            accs_mask_classes = self.accs_b4_distill_mask_classes
         else:
             accs = self.accs
-            accs_mask_classes = self.accs_mask_classes
 
         if self.setting == 'general-continual':
             accs.append(mean_acc)
@@ -146,6 +144,11 @@ class Logger:
             mean_acc, _ = mean_acc
             accs.append(mean_acc)
         else:
+            if before_distill:
+                accs_mask_classes = self.accs_b4_distill_mask_classes
+            else:
+                accs_mask_classes = self.accs_mask_classes
+
             mean_acc_class_il, mean_acc_task_il = mean_acc
             accs.append(mean_acc_class_il)
             accs_mask_classes.append(mean_acc_task_il)
