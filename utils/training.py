@@ -94,9 +94,9 @@ def train(model: ContinualModel, dataset: ContinualDataset,
         experiment_name = f'model={args.model}_buffer_size={args.buffer_size}'
         if args.model == 'simplyadd':
             experiment_name += f'_distill_opt={args.distill_opt}' 
-            experiment_name += f'distill_lr={args.distill_lr}'
-            experiment_name += f'num_distill_steps={args.num_distill_steps}'
-            experiment_name += f'buffer_batch_size={args.buffer_minibatch_size}'
+            experiment_name += f'_distill_lr={args.distill_lr}'
+            experiment_name += f'_num_distill_steps={args.num_distill_steps}'
+            experiment_name += f'_buffer_batch_size={args.buffer_minibatch_size}'
             experiment_name += f'_prior_hidden={args.prior_hidden_size}'
             experiment_name += f'_reinit_prior={args.reinit_prior}'
 
