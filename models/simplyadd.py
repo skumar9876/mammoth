@@ -21,6 +21,7 @@ def get_parser() -> ArgumentParser:
     parser.add_argument('--buffer_minibatch_size', type=int, required=True)
     parser.add_argument('--distill_opt', type=str, required=True)
     parser.add_argument('--distill_lr', type=float, required=True)
+    parser.add_argument('--prior_hidden_size', type=float, required=True)
     return parser
 
 

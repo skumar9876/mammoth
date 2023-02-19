@@ -15,7 +15,7 @@ class MNISTMLP(MammothBackbone):
     Designed for the MNIST dataset.
     """
 
-    def __init__(self, input_size: int, output_size: int) -> None:
+    def __init__(self, input_size: int, output_size: int, hidden_size: int = 100) -> None:
         """
         Instantiates the layers of the network.
         :param input_size: the size of the input data
@@ -26,8 +26,8 @@ class MNISTMLP(MammothBackbone):
         self.input_size = input_size
         self.output_size = output_size
 
-        self.fc1 = nn.Linear(self.input_size, 100)
-        self.fc2 = nn.Linear(100, 100)
+        self.fc1 = nn.Linear(self.input_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
 
         self._features = nn.Sequential(
             self.fc1,
@@ -35,7 +35,7 @@ class MNISTMLP(MammothBackbone):
             self.fc2,
             nn.ReLU(),
         )
-        self.classifier = nn.Linear(100, self.output_size)
+        self.classifier = nn.Linear(hidden_size, self.output_size)
         self.net = nn.Sequential(self._features, self.classifier)
         self.reset_parameters()
 
