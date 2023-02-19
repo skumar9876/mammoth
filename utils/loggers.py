@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from contextlib import suppress
+import enum
 import os
 import sys
 from typing import Any, Dict
@@ -42,9 +43,13 @@ class Logger:
                  model_str: str) -> None:
         self.accs = []
         self.fullaccs = []
+        self.accs_b4_distill = []
+        self.fullaccs_b4_distill = []
         if setting_str == 'class-il':
             self.accs_mask_classes = []
             self.fullaccs_mask_classes = []
+            self.accs_b4_distill_mask_classes = []
+            self.fullaccs_b4_distill_mask_classes = []
         self.setting = setting_str
         self.dataset = dataset_str
         self.model = model_str
@@ -59,6 +64,8 @@ class Logger:
         dic = {
             'accs': self.accs,
             'fullaccs': self.fullaccs,
+            'accs_b4_distill': self.accs_b4_distill,
+            'fullaccs_b4_distill': self.fullaccs_b4_distill,
             'fwt': self.fwt,
             'bwt': self.bwt,
             'forgetting': self.forgetting,
@@ -69,12 +76,16 @@ class Logger:
         if self.setting == 'class-il':
             dic['accs_mask_classes'] = self.accs_mask_classes
             dic['fullaccs_mask_classes'] = self.fullaccs_mask_classes
+            dic['accs_b4_distill_mask_classes'] = self.accs_b4_distill_mask_classes
+            dic['fullaccs_b4_distill_mask_classes'] = self.fullaccs_b4_distill_mask_classes
 
         return dic
 
     def load(self, dic):
         self.accs = dic['accs']
         self.fullaccs = dic['fullaccs']
+        self.accs_b4_distill = dic['accs_b4_distill']
+        self.fullaccs_b4_distill = dic['fullaccs_b4_distill']
         self.fwt = dic['fwt']
         self.bwt = dic['bwt']
         self.forgetting = dic['forgetting']
@@ -99,6 +110,8 @@ class Logger:
         if self.setting == 'class-il':
             self.accs_mask_classes = self.accs_mask_classes[:-num]
             self.fullaccs_mask_classes = self.fullaccs_mask_classes[:-num]
+            self.accs_b4_distill_mask_classes = self.accs_b4_distill_mask_classes[:-num]
+            self.fullaccs_b4_distill_mask_classes = self.fullaccs_b4_distill_mask_classes[:-num]
 
     def add_fwt(self, results, accs, results_mask_classes, accs_mask_classes):
         self.fwt = forward_transfer(results, accs)
@@ -113,26 +126,38 @@ class Logger:
         self.forgetting = forgetting(results)
         self.forgetting_mask_classes = forgetting(results_mask_classes)
 
-    def log(self, mean_acc: np.ndarray) -> None:
+    def log(self, mean_acc: np.ndarray, before_distill=False) -> None:
         """
         Logs a mean accuracy value.
         :param mean_acc: mean accuracy value
         """
+        if before_distill:
+            accs = self.accs_b4_distill
+            accs_mask_classes = self.accs_b4_distill_mask_classes
+        else:
+            accs = self.accs
+            accs_mask_classes = self.accs_mask_classes
+
         if self.setting == 'general-continual':
-            self.accs.append(mean_acc)
+            accs.append(mean_acc)
         elif self.setting == 'domain-il':
             mean_acc, _ = mean_acc
-            self.accs.append(mean_acc)
+            accs.append(mean_acc)
         else:
             mean_acc_class_il, mean_acc_task_il = mean_acc
-            self.accs.append(mean_acc_class_il)
-            self.accs_mask_classes.append(mean_acc_task_il)
+            accs.append(mean_acc_class_il)
+            accs_mask_classes.append(mean_acc_task_il)
 
-    def log_fullacc(self, accs):
+    def log_fullacc(self, accs, before_distill=False):
         if self.setting == 'class-il':
             acc_class_il, acc_task_il = accs
-            self.fullaccs.append(acc_class_il)
-            self.fullaccs_mask_classes.append(acc_task_il)
+
+            if before_distill:
+                self.fullaccs_b4_distill.append(acc_class_il)
+                self.fullaccs_b4_distill_mask_classes.append(acc_task_il)
+            else:
+                self.fullaccs.append(acc_class_il)
+                self.fullaccs_mask_classes.append(acc_task_il)
 
     def write(self, args: Dict[str, Any]) -> None:
         """
@@ -144,9 +169,16 @@ class Logger:
         for i, acc in enumerate(self.accs):
             wrargs['accmean_task' + str(i + 1)] = acc
 
+        for i, acc in enumerate(self.accs_b4_distill):
+            wrargs['accmean_task_before_distill' + str(i + 1)] = acc
+
         for i, fa in enumerate(self.fullaccs):
             for j, acc in enumerate(fa):
                 wrargs['accuracy_' + str(j + 1) + '_task' + str(i + 1)] = acc
+            
+        for i, fa in enumerate(self.fullaccs_b4_distill):
+            for j, acc in enumerate(fa):
+                wrargs['accuracy_before_distill_' + str(j + 1) + '_task' + str(i + 1)] = acc
 
         wrargs['forward_transfer'] = self.fwt
         wrargs['backward_transfer'] = self.bwt
@@ -173,9 +205,16 @@ class Logger:
             for i, acc in enumerate(self.accs_mask_classes):
                 wrargs['accmean_task' + str(i + 1)] = acc
 
+            for i, acc in enumerate(self.accs_b4_distill_mask_classes):
+                wrargs['accmean_task_b4_distill' + str(i + 1)] = acc
+
             for i, fa in enumerate(self.fullaccs_mask_classes):
                 for j, acc in enumerate(fa):
                     wrargs['accuracy_' + str(j + 1) + '_task' + str(i + 1)] = acc
+            
+            for i, fa in enumerate(self.fullaccs_b4_distill_mask_classes):
+                for j, acc in enumerate(fa):
+                    wrargs['accuracy_' + str(j + 1) + '_task' + str(i + 1) + '_b4_distill'] = acc
 
             wrargs['forward_transfer'] = self.fwt_mask_classes
             wrargs['backward_transfer'] = self.bwt_mask_classes

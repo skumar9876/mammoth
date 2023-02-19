@@ -150,7 +150,16 @@ def train(model: ContinualModel, dataset: ContinualDataset,
             if scheduler is not None:
                 scheduler.step()
 
+        # Evaluate before distilling.
+        accs = evaluate(model, dataset)
+        mean_acc = np.mean(accs, axis=1)
+        if not args.disable_log:
+            logger.log(mean_acc, before_distill=True)
+            logger.log_fullacc(accs, before_distill=True)
+
+
         if hasattr(model, 'end_task'):
+            # Distill.
             model.end_task(dataset)
 
         accs = evaluate(model, dataset)

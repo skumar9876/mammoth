@@ -33,7 +33,7 @@ class SimplyAdd(ContinualModel):
         self.prior_opt = SGD(self.prior.parameters(), lr=self.args.lr)
         self.PRIOR_PATH = "prior_model.pt"
         self.update_period = args.update_period
-        self.num_distill_steps = args.update_period * 10
+        self.num_distill_steps = args.update_period
         self.step = 0
 
         # Add models to device.
@@ -78,7 +78,7 @@ class SimplyAdd(ContinualModel):
         if not self.buffer.is_empty():
             for i in range(self.num_distill_steps):
                 buf_inputs, _ = self.buffer.get_data(
-                self.args.minibatch_size, transform=self.transform)
+                    self.args.minibatch_size, transform=self.transform)
                 buf_pred_logits = self.prior(buf_inputs) + self.net_init(buf_inputs).detach()
                 buf_target_logits = self.prior_old(buf_inputs).detach() + self.net(buf_inputs).detach()
 
