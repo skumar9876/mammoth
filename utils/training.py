@@ -152,7 +152,7 @@ def train(model: ContinualModel, dataset: ContinualDataset,
 
         # Evaluate before distilling.
         accs_b4_distill = evaluate(model, dataset)
-        mean_acc_b4_distill = np.mean(accs, axis=1)
+        mean_acc_b4_distill = np.mean(accs_b4_distill, axis=1)
         if not args.disable_log:
             logger.log(mean_acc_b4_distill, before_distill=True)
             logger.log_fullacc(accs_b4_distill, before_distill=True)
