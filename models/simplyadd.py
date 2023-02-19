@@ -21,7 +21,8 @@ def get_parser() -> ArgumentParser:
     parser.add_argument('--buffer_minibatch_size', type=int, required=True)
     parser.add_argument('--distill_opt', type=str, required=True)
     parser.add_argument('--distill_lr', type=float, required=True)
-    parser.add_argument('--prior_hidden_size', type=float, required=True)
+    parser.add_argument('--prior_hidden_size', type=int, required=True)
+    parser.add_argument('--reinit_prior', action='store_true', required=True)
     return parser
 
 
@@ -40,6 +41,7 @@ class SimplyAdd(ContinualModel):
             self.prior_opt = Adam(self.prior.parameters(), lr=self.args.distill_lr)
         self.PRIOR_PATH = "prior_model.pt"
         self.num_distill_steps = args.num_distill_steps
+        self.reinit_prior = args.reinit_prior
         self.step = 0
 
         # Add models to device.
@@ -103,6 +105,8 @@ class SimplyAdd(ContinualModel):
     def update_prior(self):
         torch.save(self.prior.state_dict(), self.PRIOR_PATH)
         self.prior_old.load_state_dict(torch.load(self.PRIOR_PATH), strict=True)
+        if self.reinit_prior:
+            self.prior.load_state_dict(torch.load(self.TRAIN_INIT_PATH), strict=True)
 
     def update_train(self):
         self.net.load_state_dict(torch.load(self.TRAIN_INIT_PATH), strict=True)
