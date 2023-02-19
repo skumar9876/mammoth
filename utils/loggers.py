@@ -95,6 +95,8 @@ class Logger:
         if self.setting == 'class-il':
             self.accs_mask_classes = dic['accs_mask_classes']
             self.fullaccs_mask_classes = dic['fullaccs_mask_classes']
+            self.accs_b4_distill_mask_classes = dic['accs_b4_distill_mask_classes']
+            self.fullaccs_b4_distill_mask_classes = dic['fullaccs_b4_distill_mask_classes']
 
     def rewind(self, num):
         self.accs = self.accs[:-num]
