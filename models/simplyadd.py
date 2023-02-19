@@ -19,6 +19,8 @@ def get_parser() -> ArgumentParser:
 
     parser.add_argument('--num_distill_steps', type=int, required=True)
     parser.add_argument('--buffer_minibatch_size', type=int, required=True)
+    parser.add_argument('--distill_opt', type=str, required=True)
+    parser.add_argument('--distill_lr', type=float, required=True)
     return parser
 
 
@@ -31,7 +33,10 @@ class SimplyAdd(ContinualModel):
         self.net_init = copy.deepcopy(backbone)
         self.prior = copy.deepcopy(backbone)
         self.prior_old = copy.deepcopy(self.prior)
-        self.prior_opt = SGD(self.prior.parameters(), lr=self.args.lr)
+        if args.distill_opt == 'SGD':
+            self.prior_opt = SGD(self.prior.parameters(), lr=self.args.distill_lr)
+        else:
+            self.prior_opt = Adam(self.prior.parameters(), lr=self.args.distill_lr)
         self.PRIOR_PATH = "prior_model.pt"
         self.num_distill_steps = args.num_distill_steps
         self.step = 0
