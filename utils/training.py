@@ -90,8 +90,13 @@ def train(model: ContinualModel, dataset: ContinualDataset,
     print(args)
 
     if not args.nowand:
+
+        experiment_name = f'model={args.model}'
+        if args.model == 'simplyadd':
+            experiment_name += f'num_distill_steps={args.num_distill_steps}_buffer_minibatch_size={args.buffer_minibatch_size}'
+
         assert wandb is not None, "Wandb not installed, please install it or run without wandb"
-        wandb.init(project=args.wandb_project, entity=args.wandb_entity, config=vars(args))
+        wandb.init(project=args.wandb_project, entity=args.wandb_entity, config=vars(args), name=experiment_name)
         args.wandb_url = wandb.run.get_url()
 
     model.net.to(model.device)
