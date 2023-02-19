@@ -151,11 +151,11 @@ def train(model: ContinualModel, dataset: ContinualDataset,
                 scheduler.step()
 
         # Evaluate before distilling.
-        accs = evaluate(model, dataset)
-        mean_acc = np.mean(accs, axis=1)
+        accs_b4_distill = evaluate(model, dataset)
+        mean_acc_b4_distill = np.mean(accs, axis=1)
         if not args.disable_log:
-            logger.log(mean_acc, before_distill=True)
-            logger.log_fullacc(accs, before_distill=True)
+            logger.log(mean_acc_b4_distill, before_distill=True)
+            logger.log_fullacc(accs_b4_distill, before_distill=True)
 
 
         if hasattr(model, 'end_task'):
@@ -177,6 +177,12 @@ def train(model: ContinualModel, dataset: ContinualDataset,
             d2={'RESULT_class_mean_accs': mean_acc[0], 'RESULT_task_mean_accs': mean_acc[1],
                 **{f'RESULT_class_acc_{i}': a for i, a in enumerate(accs[0])},
                 **{f'RESULT_task_acc_{i}': a for i, a in enumerate(accs[1])}}
+
+            d2_b4_distill={'RESULT_class_mean_accs_b4_distill': mean_acc_b4_distill[0], 'RESULT_task_mean_accs_b4_distill': mean_acc_b4_distill[1],
+                           **{f'RESULT_class_acc_{i}_b4_distill': a for i, a in enumerate(accs_b4_distill[0])},
+                           **{f'RESULT_task_acc_{i}_b4_distill': a for i, a in enumerate(accs_b4_distill[1])}}
+
+            d2.update(d2_b4_distill)
 
             wandb.log(d2)
 
