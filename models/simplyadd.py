@@ -58,6 +58,7 @@ class SimplyAdd(ContinualModel):
 
         # Save initial parameters.
         self.TRAIN_INIT_PATH = "train_model_init.pt"
+        self.PRIOR_INIT_PATH = "prior_model_init.pt"
 
         self.buffer = Buffer(self.args.buffer_size, self.device)
 
@@ -72,6 +73,8 @@ class SimplyAdd(ContinualModel):
     def observe(self, inputs, labels, not_aug_inputs):
         if self.step == 0:
             torch.save(self.net_init.state_dict(), f'{self.model_save_dir}/{self.TRAIN_INIT_PATH}')
+            torch.save(self.prior_old.state_dict(), f'{self.model_save_dir}/{self.PRIOR_INIT_PATH}')
+
         self.step += 1
         # Update train network.
         self.opt.zero_grad()
