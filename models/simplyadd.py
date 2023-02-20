@@ -95,7 +95,7 @@ class SimplyAdd(ContinualModel):
     def distill(self):
         if not self.buffer.is_empty():
             for i in range(self.num_distill_steps):
-                buf_inputs, _ = self.buffer.get_data(
+                buf_inputs, buf_logits = self.buffer.get_data(
                     self.args.buffer_minibatch_size, transform=self.transform)
                 buf_pred_logits = self.prior(buf_inputs) + self.net_init(buf_inputs).detach()
                 buf_target_logits = self.prior_old(buf_inputs).detach() + self.net(buf_inputs).detach()
