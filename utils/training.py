@@ -89,7 +89,11 @@ def train(model: ContinualModel, dataset: ContinualDataset,
     """
     print(args)
 
-    experiment_name = f'model={args.model}_buffer_size={args.buffer_size}'
+    experiment_name = f'model={args.model}'
+
+    if args.model != 'sgd':
+        experiment_name += f'_buffer_size={args.buffer_size}'
+
     if args.model == 'simplyadd':
         experiment_name += f'_distill_opt={args.distill_opt}' 
         experiment_name += f'_distill_lr={args.distill_lr}'
