@@ -23,6 +23,7 @@ def get_parser() -> ArgumentParser:
     parser.add_argument('--distill_opt', type=str, required=True)
     parser.add_argument('--distill_lr', type=float, required=True)
     parser.add_argument('--prior_hidden_size', type=int, required=True)
+    parser.add_argument('--net_hidden_size', type=int, required=True)
     parser.add_argument('--reinit_prior', action='store_true')
     return parser
 
@@ -33,7 +34,7 @@ class SimplyAdd(ContinualModel):
 
     def __init__(self, backbone, loss, args, transform):
         super(SimplyAdd, self).__init__(backbone, loss, args, transform)
-        self.net_init = copy.deepcopy(backbone)
+        self.net = MNISTMLP(28 * 28, 10, hidden_size=args.net_hidden_size)
         self.prior = MNISTMLP(28 * 28, 10, hidden_size=args.prior_hidden_size)
         self.prior_old = copy.deepcopy(self.prior)
         if args.distill_opt == 'SGD':
@@ -47,13 +48,11 @@ class SimplyAdd(ContinualModel):
 
         # Add models to device.
         self.net.to(self.device)
-        self.net_init.to(self.device)
         self.prior.to(self.device)
         self.prior_old.to(self.device)
 
         # Save initial parameters.
-        self.TRAIN_INIT_PATH = "train_model_init"
-        torch.save(self.net_init.state_dict(), self.TRAIN_INIT_PATH)
+        self.TRAIN_INIT_PATH = "train_model_init.pt"
 
         self.buffer = Buffer(self.args.buffer_size, self.device)
 
@@ -66,6 +65,8 @@ class SimplyAdd(ContinualModel):
         return self.prior_old(x) + self.net(x)
 
     def observe(self, inputs, labels, not_aug_inputs):
+        if self.step == 0:
+            torch.save(self.net_init.state_dict(), f'{self.model_save_dir}/{self.TRAIN_INIT_PATH}')
         self.step += 1
         # Update train network.
         self.opt.zero_grad()
@@ -104,15 +105,18 @@ class SimplyAdd(ContinualModel):
                 self.prior_opt.step()
 
     def update_prior(self):
-        torch.save(self.prior.state_dict(), self.PRIOR_PATH)
-        self.prior_old.load_state_dict(torch.load(self.PRIOR_PATH), strict=True)
+        torch.save(self.prior.state_dict(), f'{self.model_save_dir}/{self.PRIOR_PATH}')
+        self.prior_old.load_state_dict(torch.load(f'{self.model_save_dir}/{self.PRIOR_PATH}'), strict=True)
         if self.reinit_prior:
-            self.prior.load_state_dict(torch.load(self.TRAIN_INIT_PATH), strict=True)
+            self.prior.load_state_dict(torch.load(f'{self.model_save_dir}/{self.TRAIN_INIT_PATH}'), strict=True)
 
     def update_train(self):
-        self.net.load_state_dict(torch.load(self.TRAIN_INIT_PATH), strict=True)
+        self.net.load_state_dict(torch.load(f'{self.model_save_dir}/{self.TRAIN_INIT_PATH}'), strict=True)
     
     def end_task(self, unused_dataset):
         self.distill()
         self.update_prior()
         self.update_train()
+    
+    def set_model_save_dir(self, model_save_dir):
+        self.model_save_dir = model_save_dir

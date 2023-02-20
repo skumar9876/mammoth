@@ -89,17 +89,19 @@ def train(model: ContinualModel, dataset: ContinualDataset,
     """
     print(args)
 
+    experiment_name = f'model={args.model}_buffer_size={args.buffer_size}'
+    if args.model == 'simplyadd':
+        experiment_name += f'_distill_opt={args.distill_opt}' 
+        experiment_name += f'_distill_lr={args.distill_lr}'
+        experiment_name += f'_num_distill_steps={args.num_distill_steps}'
+        experiment_name += f'_buffer_batch_size={args.buffer_minibatch_size}'
+        experiment_name += f'_net_hidden={args.net_hidden_size}'
+        experiment_name += f'_prior_hidden={args.prior_hidden_size}'
+        experiment_name += f'_reinit_prior={args.reinit_prior}'
+
+        model.set_model_save_dir(experiment_name)
+
     if not args.nowand:
-
-        experiment_name = f'model={args.model}_buffer_size={args.buffer_size}'
-        if args.model == 'simplyadd':
-            experiment_name += f'_distill_opt={args.distill_opt}' 
-            experiment_name += f'_distill_lr={args.distill_lr}'
-            experiment_name += f'_num_distill_steps={args.num_distill_steps}'
-            experiment_name += f'_buffer_batch_size={args.buffer_minibatch_size}'
-            experiment_name += f'_prior_hidden={args.prior_hidden_size}'
-            experiment_name += f'_reinit_prior={args.reinit_prior}'
-
         assert wandb is not None, "Wandb not installed, please install it or run without wandb"
         wandb.init(project=args.wandb_project, entity=args.wandb_entity, config=vars(args), name=experiment_name)
         args.wandb_url = wandb.run.get_url()
