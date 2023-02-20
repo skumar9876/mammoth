@@ -89,7 +89,7 @@ def train(model: ContinualModel, dataset: ContinualDataset,
     """
     print(args)
 
-    experiment_name = f'model={args.model}'
+    experiment_name = f'dataset={args.dataset}_model={args.model}'
 
     if args.model != 'sgd':
         experiment_name += f'_buffer_size={args.buffer_size}'
