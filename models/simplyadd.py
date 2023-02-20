@@ -116,7 +116,7 @@ class SimplyAdd(ContinualModel):
         torch.save(self.prior.state_dict(), f'{self.model_save_dir}/{self.PRIOR_PATH}')
         self.prior_old.load_state_dict(torch.load(f'{self.model_save_dir}/{self.PRIOR_PATH}'), strict=True)
         if self.reinit_prior:
-            self.prior.load_state_dict(torch.load(f'{self.model_save_dir}/{self.TRAIN_INIT_PATH}'), strict=True)
+            self.prior.load_state_dict(torch.load(f'{self.model_save_dir}/{self.PRIOR_INIT_PATH}'), strict=True)
 
     def update_train(self):
         self.net.load_state_dict(torch.load(f'{self.model_save_dir}/{self.TRAIN_INIT_PATH}'), strict=True)
