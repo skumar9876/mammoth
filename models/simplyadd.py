@@ -122,6 +122,6 @@ class SimplyAdd(ContinualModel):
         self.update_train()
     
     def set_model_save_dir(self, model_save_dir):
-        if not os.isdir(model_save_dir):
+        if not os.path.isdir(model_save_dir):
             os.makedir(model_save_dir)
         self.model_save_dir = model_save_dir
