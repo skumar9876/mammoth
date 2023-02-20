@@ -49,6 +49,7 @@ class SimplyAdd(ContinualModel):
         self.num_distill_steps = args.num_distill_steps
         self.reinit_prior = args.reinit_prior
         self.step = 0
+        self.internal_task_id = 0
 
         # Add models to device.
         self.net.to(self.device)
@@ -82,8 +83,9 @@ class SimplyAdd(ContinualModel):
         train_loss = self.loss(outputs, labels)
         train_loss.backward()
         self.opt.step()
-
-        self.buffer.add_data(examples=not_aug_inputs, logits=outputs.data)
+        
+        internal_task_ids = self.internal_task_id * torch.ones(size=(len(inputs)))
+        self.buffer.add_data(examples=not_aug_inputs, logits=outputs.data, task_labels=internal_task_ids)
 
         # if self.step % self.update_period == 0:
         #     self.distill()
@@ -95,10 +97,11 @@ class SimplyAdd(ContinualModel):
     def distill(self):
         if not self.buffer.is_empty():
             for i in range(self.num_distill_steps):
-                buf_inputs, buf_logits = self.buffer.get_data(
+                buf_inputs, buf_logits, buf_internal_task_ids = self.buffer.get_data(
                     self.args.buffer_minibatch_size, transform=self.transform)
                 buf_pred_logits = self.prior(buf_inputs) + self.net_init(buf_inputs).detach()
-                buf_target_logits = self.prior_old(buf_inputs).detach() + self.net(buf_inputs).detach()
+                buf_target_logits = self.prior_old(buf_inputs).detach() + (
+                    buf_internal_task_ids == self.internal_task_ids).detach().float() * self.net(buf_inputs).detach()
 
                 self.prior_opt.zero_grad()
                 prior_loss = F.mse_loss(buf_pred_logits, buf_target_logits)
@@ -125,6 +128,7 @@ class SimplyAdd(ContinualModel):
         self.distill()
         self.update_prior()
         self.update_train()
+        self.internal_task_id += 1
     
     def set_model_save_dir(self, model_save_dir):
         if not os.path.isdir(model_save_dir):
