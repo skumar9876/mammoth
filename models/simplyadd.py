@@ -1,5 +1,6 @@
 import copy
 import math
+import os
 from sys import float_repr_style
 import torch
 from torch.nn import functional as F
@@ -121,4 +122,6 @@ class SimplyAdd(ContinualModel):
         self.update_train()
     
     def set_model_save_dir(self, model_save_dir):
+        if not os.isdir(model_save_dir):
+            os.makedir(model_save_dir)
         self.model_save_dir = model_save_dir
