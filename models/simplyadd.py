@@ -35,6 +35,7 @@ class SimplyAdd(ContinualModel):
     def __init__(self, backbone, loss, args, transform):
         super(SimplyAdd, self).__init__(backbone, loss, args, transform)
         self.net = MNISTMLP(28 * 28, 10, hidden_size=args.net_hidden_size)
+        self.net_init = copy.deepcopy(self.net)
         self.prior = MNISTMLP(28 * 28, 10, hidden_size=args.prior_hidden_size)
         self.prior_old = copy.deepcopy(self.prior)
         if args.distill_opt == 'SGD':
@@ -48,6 +49,7 @@ class SimplyAdd(ContinualModel):
 
         # Add models to device.
         self.net.to(self.device)
+        self.net_init.to(self.device)
         self.prior.to(self.device)
         self.prior_old.to(self.device)
 
