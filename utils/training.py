@@ -99,7 +99,8 @@ def train(model: ContinualModel, dataset: ContinualDataset,
         experiment_name += f'_prior_hidden={args.prior_hidden_size}'
         experiment_name += f'_reinit_prior={args.reinit_prior}'
 
-        model.set_model_save_dir(experiment_name)
+        param_dir = f'param_dir/{experiment_name}'
+        model.set_model_save_dir(param_dir)
 
     if not args.nowand:
         assert wandb is not None, "Wandb not installed, please install it or run without wandb"
