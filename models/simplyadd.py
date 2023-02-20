@@ -8,6 +8,7 @@ from torch.optim import Adam, SGD
 from models.utils.continual_model import ContinualModel
 from utils.args import ArgumentParser, add_experiment_args, add_management_args, add_rehearsal_args
 from utils.buffer import Buffer
+from backbone.MNISTMLP import MNISTMLP
 
 
 def get_parser() -> ArgumentParser:
@@ -22,7 +23,7 @@ def get_parser() -> ArgumentParser:
     parser.add_argument('--distill_opt', type=str, required=True)
     parser.add_argument('--distill_lr', type=float, required=True)
     parser.add_argument('--prior_hidden_size', type=int, required=True)
-    parser.add_argument('--reinit_prior', action='store_true', required=True)
+    parser.add_argument('--reinit_prior', action='store_true')
     return parser
 
 
@@ -33,7 +34,7 @@ class SimplyAdd(ContinualModel):
     def __init__(self, backbone, loss, args, transform):
         super(SimplyAdd, self).__init__(backbone, loss, args, transform)
         self.net_init = copy.deepcopy(backbone)
-        self.prior = copy.deepcopy(backbone)
+        self.prior = MNISTMLP(28 * 28, 10, hidden_size=args.prior_hidden_size)
         self.prior_old = copy.deepcopy(self.prior)
         if args.distill_opt == 'SGD':
             self.prior_opt = SGD(self.prior.parameters(), lr=self.args.distill_lr)
