@@ -62,6 +62,8 @@ class SimplyAdd(ContinualModel):
         self.PRIOR_INIT_PATH = "prior_model_init.pt"
 
         self.buffer = Buffer(self.args.buffer_size, self.device)
+        # TODO: Re-factor this. It's a variable used just for evaluation purposes.
+        self.just_distilled = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -69,9 +71,13 @@ class SimplyAdd(ContinualModel):
         :param x: batch of inputs
         :return: the result of the computation
         """
-        return self.prior_old(x) + self.net(x)
+        if self.just_distilled:
+            return self.prior_old(x)
+        else:
+            return self.prior_old + self.net(x)
 
     def observe(self, inputs, labels, not_aug_inputs):
+        self.just_distilled = False
         if self.step == 0:
             torch.save(self.net_init.state_dict(), f'{self.model_save_dir}/{self.TRAIN_INIT_PATH}')
             torch.save(self.prior_old.state_dict(), f'{self.model_save_dir}/{self.PRIOR_INIT_PATH}')
@@ -83,14 +89,9 @@ class SimplyAdd(ContinualModel):
         train_loss = self.loss(outputs, labels)
         train_loss.backward()
         self.opt.step()
-        
-        internal_task_ids = self.internal_task_id * torch.ones(size=(len(inputs)))
-        self.buffer.add_data(examples=not_aug_inputs, logits=outputs.data, task_labels=internal_task_ids)
 
-        # if self.step % self.update_period == 0:
-        #     self.distill()
-        #     self.update_prior()
-        #     self.update_train()
+        internal_task_ids = self.internal_task_id * torch.ones(size=(len(inputs), 1))
+        self.buffer.add_data(examples=not_aug_inputs, logits=outputs.data, task_labels=internal_task_ids)
 
         return train_loss.item()
 
@@ -99,9 +100,9 @@ class SimplyAdd(ContinualModel):
             for i in range(self.num_distill_steps):
                 buf_inputs, buf_logits, buf_internal_task_ids = self.buffer.get_data(
                     self.args.buffer_minibatch_size, transform=self.transform)
-                buf_pred_logits = self.prior(buf_inputs) + self.net_init(buf_inputs).detach()
+                buf_pred_logits = self.prior(buf_inputs) # + self.net_init(buf_inputs).detach()
                 buf_target_logits = self.prior_old(buf_inputs).detach() + (
-                    buf_internal_task_ids == self.internal_task_ids).detach().float() * self.net(buf_inputs).detach()
+                    buf_internal_task_ids == self.internal_task_id).detach().float() * self.net(buf_inputs).detach()
 
                 self.prior_opt.zero_grad()
                 prior_loss = F.mse_loss(buf_pred_logits, buf_target_logits)
@@ -129,6 +130,7 @@ class SimplyAdd(ContinualModel):
         self.update_prior()
         self.update_train()
         self.internal_task_id += 1
+        self.just_distilled = True
     
     def set_model_save_dir(self, model_save_dir):
         if not os.path.isdir(model_save_dir):
