@@ -37,18 +37,14 @@ class SimplyAdd(ContinualModel):
     def __init__(self, backbone, loss, args, transform):
         super(SimplyAdd, self).__init__(backbone, loss, args, transform)
         self.net = MNISTMLP(28 * 28, 10, hidden_size=args.net_hidden_size)
-        if args.train_opt == 'SGD':
-            self.opt = SGD(self.net.parameters(), lr=self.args.lr)
-        else:
-            self.opt = Adam(self.net.parameters(), lr=self.args.lr)
         self.net_init = copy.deepcopy(self.net)
-
         self.prior = MNISTMLP(28 * 28, 10, hidden_size=args.prior_hidden_size)
         self.prior_old = copy.deepcopy(self.prior)
-        if args.distill_opt == 'SGD':
-            self.prior_opt = SGD(self.prior.parameters(), lr=self.args.distill_lr)
-        else:
-            self.prior_opt = Adam(self.prior.parameters(), lr=self.args.distill_lr)
+        self.train_opt_type = args.train_opt
+        self.prior_opt_type = args.distill_opt
+        self.initialize_train_opt()
+        self.initialize_prior_opt()
+        
         self.PRIOR_PATH = "prior_model.pt"
         self.num_distill_steps = args.num_distill_steps
         self.reinit_prior = args.reinit_prior
@@ -125,9 +121,23 @@ class SimplyAdd(ContinualModel):
         self.prior_old.load_state_dict(torch.load(f'{self.model_save_dir}/{self.PRIOR_PATH}'), strict=True)
         if self.reinit_prior:
             self.prior.load_state_dict(torch.load(f'{self.model_save_dir}/{self.PRIOR_INIT_PATH}'), strict=True)
+            self.initialize_prior_opt()
 
     def update_train(self):
         self.net.load_state_dict(torch.load(f'{self.model_save_dir}/{self.TRAIN_INIT_PATH}'), strict=True)
+        self.initialize_train_opt()
+
+    def initialize_train_opt(self):
+        if self.train_opt_type == 'SGD':
+            self.opt = SGD(self.net.parameters(), lr=self.args.lr)
+        else:
+            self.opt = Adam(self.net.parameters(), lr=self.args.lr)
+    
+    def initialize_prior_opt(self):
+        if self.prior_opt_type == 'SGD':
+            self.prior_opt = SGD(self.prior.parameters(), lr=self.args.distill_lr)
+        else:
+            self.prior_opt = Adam(self.prior.parameters(), lr=self.args.distill_lr)
     
     def end_task(self, unused_dataset):
         self.distill()
