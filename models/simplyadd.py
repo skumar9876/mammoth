@@ -74,7 +74,7 @@ class SimplyAdd(ContinualModel):
         if self.just_distilled:
             return self.prior_old(x)
         else:
-            return self.prior_old + self.net(x)
+            return self.prior_old(x) + self.net(x)
 
     def observe(self, inputs, labels, not_aug_inputs):
         self.just_distilled = False
