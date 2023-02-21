@@ -21,6 +21,7 @@ def get_parser() -> ArgumentParser:
 
     parser.add_argument('--num_distill_steps', type=int, required=True)
     parser.add_argument('--buffer_minibatch_size', type=int, required=True)
+    parser.add_argument('--train_opt', type=str, required=True)
     parser.add_argument('--distill_opt', type=str, required=True)
     parser.add_argument('--distill_lr', type=float, required=True)
     parser.add_argument('--prior_hidden_size', type=int, required=True)
@@ -36,7 +37,10 @@ class SimplyAdd(ContinualModel):
     def __init__(self, backbone, loss, args, transform):
         super(SimplyAdd, self).__init__(backbone, loss, args, transform)
         self.net = MNISTMLP(28 * 28, 10, hidden_size=args.net_hidden_size)
-        self.opt = SGD(self.net.parameters(), lr=self.args.lr)
+        if args.train_opt == 'SGD':
+            self.opt = SGD(self.net.parameters(), lr=self.args.lr)
+        else:
+            self.opt = Adam(self.net.parameters(), lr=self.args.lr)
         self.net_init = copy.deepcopy(self.net)
 
         self.prior = MNISTMLP(28 * 28, 10, hidden_size=args.prior_hidden_size)
