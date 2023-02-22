@@ -8,7 +8,7 @@ import sys
 from argparse import Namespace
 from typing import Tuple
 
-import sklearn
+import sklearn.metrics as metrics
 import torch
 from datasets import get_dataset
 from datasets.utils.continual_dataset import ContinualDataset
@@ -79,10 +79,19 @@ def evaluate(model: ContinualModel, dataset: ContinualDataset, last=False) -> Tu
                     _, pred = torch.max(outputs.data, 1)
                     correct_mask_classes += torch.sum(pred == labels).item()
 
-        logits_arr = torch.cat(logits_arr).numpy()
+        logits_arr = torch.cat(logits_arr)
+        probs_arr = torch.softmax(logits_arr, axis=-1).numpy()
+        logits_arr = logits_arr.numpy()
         labels_arr = torch.cat(labels_arr).numpy()
-        results_dict[f'auroc_{k}'] = sklearn.metrics.roc_auc_score(labels_arr, logits_arr)
-        results_dict[f'acc_{k}'] = sklearn.metrics.accuracy(labels_arr, np.max(logits_arr, 1))
+        results_dict[f'auroc/{str(k).zfill(2)}'] = metrics.roc_auc_score(labels_arr, probs_arr, multi_class='ovr')
+        results_dict[f'acc/{str(k).zfill(2)}'] = metrics.accuracy_score(labels_arr, np.argmax(logits_arr, 1))
+
+        results_dict[f'logits/mean_{str(k).zfill(2)}'] = np.mean(logits_arr)
+        results_dict[f'logits/var_{str(k).zfill(2)}'] = np.var(logits_arr)
+
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                results_dict[f'l2_norm/{name}'] = torch.sqrt(torch.sum(param ** 2)).detach().cpu()
 
         accs.append(correct / total * 100
                     if 'class-il' in model.COMPATIBILITY else 0)
@@ -117,13 +126,14 @@ def train(model: ContinualModel, dataset: ContinualDataset,
         experiment_name += f'_net_hidden={args.net_hidden_size}'
         experiment_name += f'_prior_hidden={args.prior_hidden_size}'
         experiment_name += f'_reinit_prior={args.reinit_prior}'
+        experiment_name += f'_selective_distill={args.selective_distill}'
 
         param_dir = f'param_dir/{experiment_name}'
         model.set_model_save_dir(param_dir)
 
     if not args.nowand:
         assert wandb is not None, "Wandb not installed, please install it or run without wandb"
-        wandb.init(project=args.wandb_project, entity=args.wandb_entity, config=vars(args), name=experiment_name)
+        wandb.init(project=args.wandb_project, entity=args.wandb_entity, config=vars(args))
         args.wandb_url = wandb.run.get_url()
 
     model.net.to(model.device)
@@ -183,12 +193,13 @@ def train(model: ContinualModel, dataset: ContinualDataset,
                 scheduler.step()
 
         # Evaluate before distilling.
-        accs_b4_distill, _, results_dict_b4_distill = evaluate(model, dataset)
-        results_dict_b4_distill = {f'{key}_b4_distill': val for key, val in results_dict.items()}
+        accs_b4_distill, accs_mask_classes_b4_distill, results_dict_b4_distill = evaluate(model, dataset)
+        results_dict_b4_distill = {f'b4_distill_{key}': val for key, val in results_dict_b4_distill.items()}
         mean_acc_b4_distill = np.mean(accs_b4_distill)
+        mean_acc_mask_classes_b4_distill = np.mean(accs_mask_classes_b4_distill)
         if not args.disable_log:
-            logger.log(mean_acc_b4_distill, before_distill=True)
-            logger.log_fullacc(accs_b4_distill, before_distill=True)
+            logger.log([mean_acc_b4_distill, mean_acc_mask_classes_b4_distill], before_distill=True)
+            logger.log_fullacc([accs_b4_distill, accs_mask_classes_b4_distill], before_distill=True)
 
 
         if hasattr(model, 'end_task'):
@@ -201,19 +212,19 @@ def train(model: ContinualModel, dataset: ContinualDataset,
 
         mean_acc = np.mean(accs)
         mean_acc_mask_classes = np.mean(accs_mask_classes)
-        print_mean_accuracy(mean_acc, t + 1, dataset.SETTING)
+        print_mean_accuracy([mean_acc, mean_acc_mask_classes], t + 1, dataset.SETTING)
 
         if not args.disable_log:
-            logger.log(mean_acc)
-            logger.log_fullacc(accs)
+            logger.log([mean_acc, mean_acc_mask_classes])
+            logger.log_fullacc([accs, accs_mask_classes])
 
         if not args.nowand:
             d2={'RESULT_class_mean_accs': mean_acc, 'RESULT_task_mean_accs': mean_acc_mask_classes,
-                **{f'RESULT_class_acc_{i}': a for i, a in enumerate(accs)},
-                **{f'RESULT_task_acc_{i}': a for i, a in enumerate(accs_mask_classes)}}
+                **{f'RESULT_class_acc/{str(i).zfill(2)}': a for i, a in enumerate(accs)},
+                **{f'RESULT_task_acc/{str(i).zfill(2)}': a for i, a in enumerate(accs_mask_classes)}}
 
-            d2_b4_distill={'RESULT_class_mean_accs_b4_distill': mean_acc_b4_distill[0], 'RESULT_task_mean_accs_b4_distill': mean_acc_b4_distill[1],
-                           **{f'RESULT_class_acc_{i}_b4_distill': a for i, a in enumerate(accs_b4_distill)}}
+            d2_b4_distill={'RESULT_class_mean_accs_b4_distill': mean_acc_b4_distill, 'RESULT_task_mean_accs_b4_distill': mean_acc_mask_classes_b4_distill,
+                           **{f'RESULT_class_acc_b4_distill/{str(i).zfill(2)}': a for i, a in enumerate(accs_b4_distill)}}
 
             d2.update(d2_b4_distill)
             d2.update(results_dict_b4_distill)

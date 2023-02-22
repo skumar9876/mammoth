@@ -27,6 +27,7 @@ def get_parser() -> ArgumentParser:
     parser.add_argument('--prior_hidden_size', type=int, required=True)
     parser.add_argument('--net_hidden_size', type=int, required=True)
     parser.add_argument('--reinit_prior', action='store_true')
+    parser.add_argument('--selective_distill', action='store_true')
     return parser
 
 
@@ -71,7 +72,7 @@ class SimplyAdd(ContinualModel):
         :param x: batch of inputs
         :return: the result of the computation
         """
-        if self.just_distilled:
+        if self.just_distilled and self.args.selective_distill:
             return self.prior_old(x)
         else:
             return self.prior_old(x) + self.net(x)
@@ -100,7 +101,8 @@ class SimplyAdd(ContinualModel):
             for i in range(self.num_distill_steps):
                 buf_inputs, buf_logits, buf_internal_task_ids = self.buffer.get_data(
                     self.args.buffer_minibatch_size, transform=self.transform)
-                buf_pred_logits = self.prior(buf_inputs) # + self.net_init(buf_inputs).detach()
+                buf_pred_logits = self.prior(buf_inputs) + float(
+                    not self.args.selective_distill) * self.net_init(buf_inputs).detach()
                 buf_target_logits = self.prior_old(buf_inputs).detach() + (
                     buf_internal_task_ids == self.internal_task_id).detach().float() * self.net(buf_inputs).detach()
 
@@ -143,8 +145,10 @@ class SimplyAdd(ContinualModel):
         self.distill()
         self.update_prior()
         self.update_train()
-        self.internal_task_id += 1
-        self.just_distilled = True
+
+        if self.args.selective_distill:
+            self.internal_task_id += 1
+            self.just_distilled = True
     
     def set_model_save_dir(self, model_save_dir):
         if not os.path.isdir(model_save_dir):
