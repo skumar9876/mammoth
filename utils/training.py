@@ -8,6 +8,7 @@ import sys
 from argparse import Namespace
 from typing import Tuple
 
+import sklearn
 import torch
 from datasets import get_dataset
 from datasets.utils.continual_dataset import ContinualDataset
@@ -47,12 +48,16 @@ def evaluate(model: ContinualModel, dataset: ContinualDataset, last=False) -> Tu
     model.net.eval()
     if hasattr(model, 'prior_net'):
         model.prior_net.eval()
+    
+    results_dict = {}
 
     accs, accs_mask_classes = [], []
+
     for k, test_loader in enumerate(dataset.test_loaders):
         if last and k < len(dataset.test_loaders) - 1:
             continue
         correct, correct_mask_classes, total = 0.0, 0.0, 0.0
+        logits_arr, labels_arr = [], []
         for data in test_loader:
             with torch.no_grad():
                 inputs, labels = data
@@ -66,17 +71,25 @@ def evaluate(model: ContinualModel, dataset: ContinualDataset, last=False) -> Tu
                 correct += torch.sum(pred == labels).item()
                 total += labels.shape[0]
 
+                logits_arr.append(outputs.detach().data.cpu())
+                labels_arr.append(labels.detach().cpu())
+
                 if dataset.SETTING == 'class-il':
                     mask_classes(outputs, dataset, k)
                     _, pred = torch.max(outputs.data, 1)
                     correct_mask_classes += torch.sum(pred == labels).item()
+
+        logits_arr = torch.cat(logits_arr).numpy()
+        labels_arr = torch.cat(labels_arr).numpy()
+        results_dict[f'auroc_{k}'] = sklearn.metrics.roc_auc_score(labels_arr, logits_arr)
+        results_dict[f'acc_{k}'] = sklearn.metrics.accuracy(labels_arr, np.max(logits_arr, 1))
 
         accs.append(correct / total * 100
                     if 'class-il' in model.COMPATIBILITY else 0)
         accs_mask_classes.append(correct_mask_classes / total * 100)
 
     model.net.train(status)
-    return accs, accs_mask_classes
+    return accs, accs_mask_classes, results_dict
 
 
 def train(model: ContinualModel, dataset: ContinualDataset,
@@ -127,7 +140,7 @@ def train(model: ContinualModel, dataset: ContinualDataset,
             model.net.train()
             _, _ = dataset_copy.get_data_loaders()
         if model.NAME != 'icarl' and model.NAME != 'pnn':
-            random_results_class, random_results_task = evaluate(model, dataset_copy)
+            random_results_class, random_results_task, _ = evaluate(model, dataset_copy)
 
     print(file=sys.stderr)
     for t in range(dataset.N_TASKS):
@@ -138,10 +151,10 @@ def train(model: ContinualModel, dataset: ContinualDataset,
         if hasattr(model, 'begin_task'):
             model.begin_task(dataset)
         if t and not args.ignore_other_metrics:
-            accs = evaluate(model, dataset, last=True)
-            results[t-1] = results[t-1] + accs[0]
+            accs, accs_mask_classes, _ = evaluate(model, dataset, last=True)
+            results[t-1] = results[t-1] + accs
             if dataset.SETTING == 'class-il':
-                results_mask_classes[t-1] = results_mask_classes[t-1] + accs[1]
+                results_mask_classes[t-1] = results_mask_classes[t-1] + accs_mask_classes
 
         scheduler = dataset.get_scheduler(model, args)
         for epoch in range(model.args.n_epochs):
@@ -170,8 +183,9 @@ def train(model: ContinualModel, dataset: ContinualDataset,
                 scheduler.step()
 
         # Evaluate before distilling.
-        accs_b4_distill = evaluate(model, dataset)
-        mean_acc_b4_distill = np.mean(accs_b4_distill, axis=1)
+        accs_b4_distill, _, results_dict_b4_distill = evaluate(model, dataset)
+        results_dict_b4_distill = {f'{key}_b4_distill': val for key, val in results_dict.items()}
+        mean_acc_b4_distill = np.mean(accs_b4_distill)
         if not args.disable_log:
             logger.log(mean_acc_b4_distill, before_distill=True)
             logger.log_fullacc(accs_b4_distill, before_distill=True)
@@ -181,11 +195,12 @@ def train(model: ContinualModel, dataset: ContinualDataset,
             # Distill.
             model.end_task(dataset)
 
-        accs = evaluate(model, dataset)
-        results.append(accs[0])
-        results_mask_classes.append(accs[1])
+        accs, accs_mask_classes, results_dict = evaluate(model, dataset)
+        results.append(accs)
+        results_mask_classes.append(accs_mask_classes)
 
-        mean_acc = np.mean(accs, axis=1)
+        mean_acc = np.mean(accs)
+        mean_acc_mask_classes = np.mean(accs_mask_classes)
         print_mean_accuracy(mean_acc, t + 1, dataset.SETTING)
 
         if not args.disable_log:
@@ -193,15 +208,16 @@ def train(model: ContinualModel, dataset: ContinualDataset,
             logger.log_fullacc(accs)
 
         if not args.nowand:
-            d2={'RESULT_class_mean_accs': mean_acc[0], 'RESULT_task_mean_accs': mean_acc[1],
-                **{f'RESULT_class_acc_{i}': a for i, a in enumerate(accs[0])},
-                **{f'RESULT_task_acc_{i}': a for i, a in enumerate(accs[1])}}
+            d2={'RESULT_class_mean_accs': mean_acc, 'RESULT_task_mean_accs': mean_acc_mask_classes,
+                **{f'RESULT_class_acc_{i}': a for i, a in enumerate(accs)},
+                **{f'RESULT_task_acc_{i}': a for i, a in enumerate(accs_mask_classes)}}
 
             d2_b4_distill={'RESULT_class_mean_accs_b4_distill': mean_acc_b4_distill[0], 'RESULT_task_mean_accs_b4_distill': mean_acc_b4_distill[1],
-                           **{f'RESULT_class_acc_{i}_b4_distill': a for i, a in enumerate(accs_b4_distill[0])},
-                           **{f'RESULT_task_acc_{i}_b4_distill': a for i, a in enumerate(accs_b4_distill[1])}}
+                           **{f'RESULT_class_acc_{i}_b4_distill': a for i, a in enumerate(accs_b4_distill)}}
 
             d2.update(d2_b4_distill)
+            d2.update(results_dict_b4_distill)
+            d2.update(results_dict)
 
             wandb.log(d2)
 
