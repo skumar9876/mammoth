@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from models.utils.continual_model import ContinualModel
-from torch.optim import Adam
+from torch.optim import Adam, SGD
 from utils.args import add_management_args, add_experiment_args, ArgumentParser
 
 
@@ -14,6 +14,7 @@ def get_parser() -> ArgumentParser:
     add_management_args(parser)
     add_experiment_args(parser)
     parser.add_argument('--train_opt', type=str, default='SGD')
+    parser.add_argument('--weight_decay_train', type=float, default=0.0)
     return parser
 
 
@@ -25,7 +26,9 @@ class Sgd(ContinualModel):
         super(Sgd, self).__init__(backbone, loss, args, transform)
 
         if self.args.train_opt == 'Adam':
-            self.opt = Adam(self.net.parameters(), lr=self.args.lr)
+            self.opt = Adam(self.net.parameters(), lr=self.args.lr, weight_decay=args.weight_decay_train)
+        elif self.args.train_opt == 'SGD':
+            self.opt = SGD(self.net.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay_train)
         
 
     def observe(self, inputs, labels, not_aug_inputs):

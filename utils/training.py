@@ -8,6 +8,7 @@ import sys
 from argparse import Namespace
 from typing import Tuple
 
+import scipy
 import sklearn.metrics as metrics
 import torch
 from datasets import get_dataset
@@ -88,6 +89,7 @@ def evaluate(model: ContinualModel, dataset: ContinualDataset, last=False) -> Tu
 
         results_dict[f'logits/mean_{str(k).zfill(2)}'] = np.mean(logits_arr)
         results_dict[f'logits/var_{str(k).zfill(2)}'] = np.var(logits_arr)
+        results_dict[f'entropy/{str(k).zfill(2)}'] = np.mean(scipy.stats.entropy(probs_arr, axis=-1, base=10))
 
         for name, param in model.named_parameters():
             if param.requires_grad:

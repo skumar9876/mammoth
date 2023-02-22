@@ -1,6 +1,5 @@
 import copy
 import math
-import os
 from sys import float_repr_style
 import torch
 from torch.nn import functional as F
@@ -28,6 +27,9 @@ def get_parser() -> ArgumentParser:
     parser.add_argument('--net_hidden_size', type=int, required=True)
     parser.add_argument('--reinit_prior', action='store_true')
     parser.add_argument('--selective_distill', action='store_true')
+    parser.add_argument('--weight_decay_train', type=float, default=0.0)
+    parser.add_argument('--weight_decay_prior', type=float, default=0.0)
+    parser.add_argument('--distill_loss_type', type=str, default='MSE')
     return parser
 
 
@@ -41,6 +43,7 @@ class SimplyAdd(ContinualModel):
         self.net_init = copy.deepcopy(self.net)
         self.prior = MNISTMLP(28 * 28, 10, hidden_size=args.prior_hidden_size)
         self.prior_old = copy.deepcopy(self.prior)
+        self.prior_init = copy.deepcopy(self.prior)
         self.train_opt_type = args.train_opt
         self.prior_opt_type = args.distill_opt
         self.initialize_train_opt()
@@ -57,10 +60,6 @@ class SimplyAdd(ContinualModel):
         self.net_init.to(self.device)
         self.prior.to(self.device)
         self.prior_old.to(self.device)
-
-        # Save initial parameters.
-        self.TRAIN_INIT_PATH = "train_model_init.pt"
-        self.PRIOR_INIT_PATH = "prior_model_init.pt"
 
         self.buffer = Buffer(self.args.buffer_size, self.device)
         # TODO: Re-factor this. It's a variable used just for evaluation purposes.
@@ -79,9 +78,6 @@ class SimplyAdd(ContinualModel):
 
     def observe(self, inputs, labels, not_aug_inputs):
         self.just_distilled = False
-        if self.step == 0:
-            torch.save(self.net_init.state_dict(), f'{self.model_save_dir}/{self.TRAIN_INIT_PATH}')
-            torch.save(self.prior_old.state_dict(), f'{self.model_save_dir}/{self.PRIOR_INIT_PATH}')
 
         self.step += 1
         # Update train network.
@@ -107,8 +103,13 @@ class SimplyAdd(ContinualModel):
                     buf_internal_task_ids == self.internal_task_id).detach().float() * self.net(buf_inputs).detach()
 
                 self.prior_opt.zero_grad()
-                prior_loss = F.mse_loss(buf_pred_logits, buf_target_logits)
-
+                if self.args.distill_loss_type == 'MSE':
+                    prior_loss = F.mse_loss(buf_pred_logits, buf_target_logits)
+                elif self.args.distill_loss_type == 'KL':
+                    loss_fn = torch.nn.KLDivLoss(log_target=True)
+                    prior_loss = loss_fn(
+                        F.log_softmax(buf_pred_logits, dim=-1), 
+                        F.log_softmax(buf_target_logits, dim=-1))
                 try:
                     assert not math.isnan(prior_loss.item())
                 except:
@@ -119,27 +120,26 @@ class SimplyAdd(ContinualModel):
                 self.prior_opt.step()
 
     def update_prior(self):
-        torch.save(self.prior.state_dict(), f'{self.model_save_dir}/{self.PRIOR_PATH}')
-        self.prior_old.load_state_dict(torch.load(f'{self.model_save_dir}/{self.PRIOR_PATH}'), strict=True)
+        self.prior_old.load_state_dict(self.prior.state_dict(), strict=True)
         if self.reinit_prior:
-            self.prior.load_state_dict(torch.load(f'{self.model_save_dir}/{self.PRIOR_INIT_PATH}'), strict=True)
+            self.prior.load_state_dict(self.prior_init.state_dict(), strict=True)
             self.initialize_prior_opt()
 
     def update_train(self):
-        self.net.load_state_dict(torch.load(f'{self.model_save_dir}/{self.TRAIN_INIT_PATH}'), strict=True)
+        self.net.load_state_dict(self.net_init.state_dict(), strict=True)
         self.initialize_train_opt()
 
     def initialize_train_opt(self):
         if self.train_opt_type == 'SGD':
-            self.opt = SGD(self.net.parameters(), lr=self.args.lr)
+            self.opt = SGD(self.net.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay_train)
         else:
-            self.opt = Adam(self.net.parameters(), lr=self.args.lr)
+            self.opt = Adam(self.net.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay_train)
     
     def initialize_prior_opt(self):
         if self.prior_opt_type == 'SGD':
-            self.prior_opt = SGD(self.prior.parameters(), lr=self.args.distill_lr)
+            self.prior_opt = SGD(self.prior.parameters(), lr=self.args.distill_lr, weight_decay=self.args.weight_decay_prior)
         else:
-            self.prior_opt = Adam(self.prior.parameters(), lr=self.args.distill_lr)
+            self.prior_opt = Adam(self.prior.parameters(), lr=self.args.distill_lr, weight_decay=self.args.weight_decay_prior)
     
     def end_task(self, unused_dataset):
         self.distill()
@@ -149,8 +149,3 @@ class SimplyAdd(ContinualModel):
         if self.args.selective_distill:
             self.internal_task_id += 1
             self.just_distilled = True
-    
-    def set_model_save_dir(self, model_save_dir):
-        if not os.path.isdir(model_save_dir):
-            os.mkdir(model_save_dir)
-        self.model_save_dir = model_save_dir
