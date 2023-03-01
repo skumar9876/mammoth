@@ -113,23 +113,6 @@ def train(model: ContinualModel, dataset: ContinualDataset,
     """
     print(args)
 
-    experiment_name = f'dataset={args.dataset}_model={args.model}'
-
-    if args.model != 'sgd':
-        experiment_name += f'_buffer_size={args.buffer_size}'
-
-    if args.model == 'simplyadd':
-        experiment_name += '_train_opt={args.train_opt}'
-        experiment_name +='_train_lr={args.lr}'
-        experiment_name += f'_distill_opt={args.distill_opt}' 
-        experiment_name += f'_distill_lr={args.distill_lr}'
-        experiment_name += f'_num_distill_steps={args.num_distill_steps}'
-        experiment_name += f'_buffer_batch_size={args.buffer_minibatch_size}'
-        experiment_name += f'_net_hidden={args.net_hidden_size}'
-        experiment_name += f'_prior_hidden={args.prior_hidden_size}'
-        experiment_name += f'_reinit_prior={args.reinit_prior}'
-        experiment_name += f'_selective_distill={args.selective_distill}'
-
     if not args.nowand:
         assert wandb is not None, "Wandb not installed, please install it or run without wandb"
         wandb.init(project=args.wandb_project, entity=args.wandb_entity, config=vars(args))

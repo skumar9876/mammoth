@@ -30,6 +30,9 @@ def get_parser() -> ArgumentParser:
     parser.add_argument('--weight_decay_train', type=float, default=0.0)
     parser.add_argument('--weight_decay_prior', type=float, default=0.0)
     parser.add_argument('--distill_loss_type', type=str, default='MSE')
+    parser.add_argument('--use_task_buffer', action='store_true')
+    parser.add_argument('--regularize_train_net', type=float, default=0.0)
+    parser.add_argument('--regularize_prior_net', type=float, default=0.0)
     return parser
 
 
@@ -44,8 +47,6 @@ class SimplyAdd(ContinualModel):
         self.prior = MNISTMLP(28 * 28, 10, hidden_size=args.prior_hidden_size)
         self.prior_old = copy.deepcopy(self.prior)
         self.prior_init = copy.deepcopy(self.prior)
-        self.train_opt_type = args.train_opt
-        self.prior_opt_type = args.distill_opt
         self.initialize_train_opt()
         self.initialize_prior_opt()
         
@@ -62,6 +63,8 @@ class SimplyAdd(ContinualModel):
         self.prior_old.to(self.device)
 
         self.buffer = Buffer(self.args.buffer_size, self.device)
+        if self.args.use_task_buffer:
+            self.task_buffer = Buffer(self.args.buffer_size, self.device)
         # TODO: Re-factor this. It's a variable used just for evaluation purposes.
         self.just_distilled = False
 
@@ -82,14 +85,33 @@ class SimplyAdd(ContinualModel):
         self.step += 1
         # Update train network.
         self.opt.zero_grad()
-        outputs = self.prior_old(inputs).detach() + self.net(inputs)
+        prior_outputs = self.prior_old(inputs).detach()
+        outputs = prior_outputs + self.net(inputs)
         train_loss = self.loss(outputs, labels)
-        train_loss.backward()
-        self.opt.step()
 
         internal_task_ids = self.internal_task_id * torch.ones(size=(len(inputs), 1))
         self.buffer.add_data(examples=not_aug_inputs, logits=outputs.data, task_labels=internal_task_ids)
+        
+        if self.args.use_task_buffer:
+            self.task_buffer.add_data(examples=not_aug_inputs, logits=outputs.data, task_labels=internal_task_ids)
 
+        # Regularize the train network to output logits of zeros on both current task and previous task data.
+        if self.args.regularize_train_net > 0 and self.internal_task_id > 0:
+            reg_loss_task_data = F.mse_loss(outputs, prior_outputs)
+            train_loss += self.args.regularize_train_net * reg_loss_task_data
+            
+            buf_inputs, buf_logits, buf_internal_task_ids = self.buffer.get_data(
+                    self.args.buffer_minibatch_size, transform=self.transform)
+            buf_pred_logits = self.prior_old(buf_inputs).detach() + self.net(buf_inputs)
+            buf_target_logits = self.prior_old(buf_inputs).detach() + float(
+                not self.args.selective_distill) * self.net_init(buf_inputs).detach()
+            
+            reg_mask = torch.ones_like(buf_internal_task_ids)  # (buf_internal_task_ids != self.internal_task_id).detach().float()
+            reg_loss = reg_mask * F.mse_loss(buf_pred_logits, buf_target_logits, reduction='none')
+            train_loss += self.args.regularize_train_net * reg_loss.mean(dim=-1).sum() / reg_mask.sum()
+        
+        train_loss.backward()
+        self.opt.step()
         return train_loss.item()
 
     def distill(self):
@@ -115,9 +137,32 @@ class SimplyAdd(ContinualModel):
                 except:
                     print("Prior loss is nan!")
                     import pdb; pdb.set_trace()
+                
+                if self.args.use_task_buffer:
+                    buf_inputs, buf_logits, buf_internal_task_ids = self.task_buffer.get_data(
+                        self.args.buffer_minibatch_size, transform=self.transform)
+                    buf_pred_logits = self.prior(buf_inputs) + float(
+                        not self.args.selective_distill) * self.net_init(buf_inputs).detach()
+                    buf_target_logits = self.prior_old(buf_inputs).detach() + self.net(buf_inputs).detach()
+
+                    if self.args.distill_loss_type == 'MSE':
+                        reg_loss = F.mse_loss(buf_pred_logits, buf_target_logits)
+                    elif self.args.distill_loss_type == 'KL':
+                        loss_fn = torch.nn.KLDivLoss(log_target=True)
+                        reg_loss = loss_fn(
+                            F.log_softmax(buf_pred_logits, dim=-1), 
+                            F.log_softmax(buf_target_logits, dim=-1))
+                    try:
+                        assert not math.isnan(prior_loss.item())
+                    except:
+                        print("Prior loss is nan!")
+                        import pdb; pdb.set_trace()
+
+                    prior_loss += self.args.regularize_prior_net * reg_loss
 
                 prior_loss.backward()
                 self.prior_opt.step()
+                    
 
     def update_prior(self):
         self.prior_old.load_state_dict(self.prior.state_dict(), strict=True)
@@ -130,15 +175,15 @@ class SimplyAdd(ContinualModel):
         self.initialize_train_opt()
 
     def initialize_train_opt(self):
-        if self.train_opt_type == 'SGD':
+        if self.args.train_opt == 'SGD':
             self.opt = SGD(self.net.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay_train)
-        else:
+        elif self.args.train_opt == 'Adam':
             self.opt = Adam(self.net.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay_train)
     
     def initialize_prior_opt(self):
-        if self.prior_opt_type == 'SGD':
+        if self.args.distill_opt == 'SGD':
             self.prior_opt = SGD(self.prior.parameters(), lr=self.args.distill_lr, weight_decay=self.args.weight_decay_prior)
-        else:
+        elif self.args.distill_opt == 'Adam':
             self.prior_opt = Adam(self.prior.parameters(), lr=self.args.distill_lr, weight_decay=self.args.weight_decay_prior)
     
     def end_task(self, unused_dataset):
@@ -149,3 +194,6 @@ class SimplyAdd(ContinualModel):
         if self.args.selective_distill:
             self.internal_task_id += 1
             self.just_distilled = True
+
+        if self.args.use_task_buffer:
+            self.task_buffer.empty()
